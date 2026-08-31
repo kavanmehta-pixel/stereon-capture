@@ -1,0 +1,8 @@
+// Copy to Sources/StereonConfig.swift and fill in the real values.
+// Sources/StereonConfig.swift is gitignored — credentials never enter git.
+import Foundation
+
+enum StereonConfig {
+    static let baseURL = URL(string: "https://<your-deployment>.up.railway.app")!
+    static let accessKey = "<access key from the deployment's env>"
+}

@@ -1,0 +1,33 @@
+name: StereonCapture
+options:
+  bundleIdPrefix: com.stereon
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+targets:
+  StereonCapture:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Stereon Capture
+        NSCameraUsageDescription: Stereon Capture uses the camera and LiDAR to scan freight items and measure their dimensions.
+        UIRequiredDeviceCapabilities: [arkit]
+        UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.stereon.capture
+            CFBundleURLSchemes: [stereon-capture]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stereon.capture
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: MK2ZH5Z9X6
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_USER_SCRIPT_SANDBOXING: "YES"
