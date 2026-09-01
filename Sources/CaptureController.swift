@@ -190,7 +190,9 @@ final class CaptureController: NSObject, ObservableObject {
 
     /// Reported with every piece — see Matcher.swift.
     static var matcherVersionTag: String { matcherVersion }
-    static let operatorName = "capture-app"
+    /// Settings-provided operator identity; falls back to the historical
+    /// "capture-app" literal on an unconfigured phone.
+    static var operatorName: String { StereonSettings.resolvedOperatorName }
 
     /// Any ARKit-capable device can run the box-fit mode.
     static var isARSupported: Bool { ARWorldTrackingConfiguration.isSupported }

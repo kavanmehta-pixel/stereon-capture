@@ -6,6 +6,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var flashing = false
     @State private var showPendingSheet = false
+    @State private var showSettings = false
 
     var body: some View {
         Group {
@@ -44,7 +45,21 @@ struct ContentView: View {
             }
 
             VStack(spacing: 10) {
-                StatusPill(message: controller.statusMessage)
+                HStack(spacing: 10) {
+                    StatusPill(message: controller.statusMessage)
+                    // Pairing is a between-jobs action — the gear stays off the
+                    // screen while a load-out is open.
+                    if !controller.loadoutActive {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .font(.body.weight(.semibold))
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.glass)
+                    }
+                }
                 if controller.loadoutActive {
                     LoadoutChip(controller: controller, onShowPending: { showPendingSheet = true })
                     if let line = controller.progressLine {
@@ -121,6 +136,11 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showPendingSheet) {
             PendingEventsSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -888,13 +908,117 @@ private struct ProgressChip: View {
     }
 }
 
-/// Session start: reference plus the plan to reconcile against. The plan list
-/// is a convenience — a typed id works when the endpoint isn't there.
+/// Deployment pairing: server, access key, operator. Blank fields fall back
+/// to the compile-time pilot config, so nothing here is ever required.
+private struct SettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var serverURL = StereonSettings.serverURLString ?? ""
+    @State private var accessKey = StereonSettings.accessKey ?? ""
+    @State private var operatorName = StereonSettings.operatorName ?? ""
+    @State private var test: StereonSettings.ConnectionTest?
+    @State private var testing = false
+
+    /// Blank is a valid choice (built-in server); a typed URL must parse.
+    private var urlOK: Bool {
+        let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || StereonSettings.parseServerURL(trimmed) != nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Server") {
+                    TextField("Built-in pilot server", text: $serverURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Access key", text: $accessKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                Section {
+                    TextField("Operator name", text: $operatorName)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Operator")
+                } footer: {
+                    Text("Who is loading — recorded on every piece.")
+                }
+                Section {
+                    Button {
+                        runTest()
+                    } label: {
+                        if testing {
+                            HStack(spacing: 10) { ProgressView(); Text("Testing…") }
+                        } else {
+                            Label("Test connection", systemImage: "dot.radiowaves.left.and.right")
+                        }
+                    }
+                    .disabled(testing || !urlOK)
+                    if let test { testRow(test) }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        StereonSettings.serverURLString = serverURL
+                        StereonSettings.accessKey = accessKey
+                        StereonSettings.operatorName = operatorName
+                        dismiss()
+                    }
+                    .disabled(!urlOK)
+                }
+            }
+        }
+    }
+
+    /// The server's actual verdict, not a rounded-off one: reachable with the
+    /// item count, refused with the status code, or the transport error.
+    private func testRow(_ test: StereonSettings.ConnectionTest) -> some View {
+        HStack(spacing: 8) {
+            switch test {
+            case .reachable(let itemCount):
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text(itemCount.map { "Reachable · \($0) library items" } ?? "Reachable")
+            case .unauthorised(let statusCode):
+                Image(systemName: "lock.slash.fill").foregroundStyle(.red)
+                Text("Key refused — HTTP \(statusCode)")
+            case .unreachable(let message):
+                Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange)
+                Text(message)
+            }
+        }
+        .font(.subheadline)
+    }
+
+    private func runTest() {
+        testing = true
+        test = nil
+        Task {
+            let result = await StereonSettings.testConnection(urlString: serverURL,
+                                                              accessKey: accessKey)
+            test = result
+            testing = false
+        }
+    }
+}
+
+/// Session start: reference, who is loading, and the plan to reconcile
+/// against. The operator name rides on every piece and writes back to
+/// Settings, so the next session starts prefilled. The plan list is a
+/// convenience — a typed id works when the endpoint isn't there.
 private struct StartLoadoutSheet: View {
     @ObservedObject var controller: CaptureController
     let onClose: () -> Void
 
     @State private var reference = ""
+    @State private var operatorName = StereonSettings.operatorName ?? ""
     @State private var planId = ""
 
     var body: some View {
@@ -904,6 +1028,10 @@ private struct StartLoadoutSheet: View {
                     TextField("e.g. VI-2481", text: $reference)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.characters)
+                }
+                Section("Operator") {
+                    TextField("Who is loading", text: $operatorName)
+                        .autocorrectionDisabled()
                 }
                 Section("Plan (optional)") {
                     if controller.plans.isEmpty {
@@ -930,6 +1058,9 @@ private struct StartLoadoutSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") {
+                        // Saved before the start event is enqueued, so the
+                        // session's own start record carries this name.
+                        StereonSettings.operatorName = operatorName
                         controller.beginLoadout(reference: reference, planId: planId)
                         onClose()
                     }

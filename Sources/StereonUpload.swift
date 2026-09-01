@@ -6,13 +6,14 @@ import simd
 /// idempotent on a client-generated id, so the outbox can re-send anything it
 /// isn't sure about without double-counting freight.
 enum StereonServer {
-    // Server address and access key live in StereonConfig.swift, which is
-    // gitignored — a key was committed here once, leaked with the repo, and
-    // had to be rotated. If the build fails on these two symbols, copy
+    // Pairing entered in Settings wins; anything unset falls back to the
+    // compile-time defaults in StereonConfig.swift, which is gitignored — a
+    // key was committed here once, leaked with the repo, and had to be
+    // rotated. If the build fails on those two symbols, copy
     // StereonConfig.example.swift.txt to Sources/StereonConfig.swift and fill
     // in the real values.
-    static let baseURL = StereonConfig.baseURL
-    static let accessKey = StereonConfig.accessKey
+    static var baseURL: URL { StereonSettings.resolvedBaseURL }
+    static var accessKey: String { StereonSettings.resolvedAccessKey }
 
     // MARK: - Scan inbox
 
@@ -28,7 +29,7 @@ enum StereonServer {
             URLQueryItem(name: "w", value: String(format: "%.4f", w)),
             URLQueryItem(name: "h", value: String(format: "%.4f", h)),
             URLQueryItem(name: "mode", value: mode),
-            URLQueryItem(name: "operator", value: "capture-app"),
+            URLQueryItem(name: "operator", value: StereonSettings.resolvedOperatorName),
         ]
         if provisional { query.append(URLQueryItem(name: "provisional", value: "1")) }
         comps.queryItems = query
